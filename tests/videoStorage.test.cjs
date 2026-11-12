@@ -184,6 +184,7 @@ test('existing saved URLs without type hints remain valid and are not redownload
 test('MIME detection accepts common media and rejects active HTML or unsupported blobs', () => {
     assert.equal(storage.mediaContentType('image/avif; charset=binary', 'https://cdn.example/asset'), 'image/avif');
     assert.equal(storage.mediaContentType('application/octet-stream', 'https://cdn.example/song.mp3?sig=x'), 'audio/mpeg');
+    assert.equal(storage.mediaContentType('binary/octet-stream', 'https://cdn.example/sample.mp4'), 'video/mp4');
     assert.equal(storage.mediaContentType('text/html', 'https://cdn.example/image.png'), null);
     assert.equal(storage.mediaContentType('application/octet-stream', 'https://cdn.example/unknown.bin'), null);
 });
@@ -283,4 +284,30 @@ test('actual workflow URL-typed outputs are archived while text values remain un
     const outputs=result.nodes.image[0].result.outputs;
     for(const output of outputs.slice(0,3)) assert.match(output.value,/^\/api\/stored-videos\//);
     assert.equal(outputs[3].value,'https://example.com/page');
+});
+
+// Real-provider regression: its CDN responds 403 when User-Agent is absent.
+test('CDN downloads identify the client and retain validated DNS pinning', async () => {
+    const { PassThrough } = require('node:stream');
+    const { EventEmitter } = require('node:events');
+    const media = await storage.download('https://cdn.example/sample.mp4', 0, {
+        resolve: async () => [{ address: '93.184.216.34', family: 4 }],
+        get: (_url, options, callback) => {
+            assert.match(options.headers['User-Agent'], /^GenerativeAIStudio\//);
+            options.lookup('cdn.example', {}, (_error, address, family) => {
+                assert.equal(address, '93.184.216.34'); assert.equal(family, 4);
+            });
+            const request = new EventEmitter(); request.setTimeout = () => {};
+            process.nextTick(() => {
+                const response = new PassThrough();
+                response.statusCode = options.headers['User-Agent'] ? 200 : 403;
+                response.headers = { 'content-type': 'binary/octet-stream', 'content-length': '5' };
+                callback(response); response.end(Buffer.from('video'));
+            });
+            return request;
+        },
+    });
+    assert.equal(media.type, 'video/mp4');
+    const chunks = []; for await (const chunk of media.body) chunks.push(chunk);
+    assert.equal(Buffer.concat(chunks).toString(), 'video');
 });

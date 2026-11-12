@@ -62,24 +62,24 @@ function mediaContentType(raw, url) {
     const type = (raw || '').split(';')[0].trim().toLowerCase();
     if (/^(image|video|audio)\/[a-z0-9.+-]+$/.test(type)) return type;
     if (type === 'application/ogg') return 'audio/ogg';
-    if (type === 'application/octet-stream' || !type) {
+    if (type === 'application/octet-stream' || type === 'binary/octet-stream' || !type) {
         const extension = /\.([a-z0-9]+)$/i.exec(new URL(url).pathname)?.[1].toLowerCase();
         return extensionTypes[extension] || null;
     }
     return null;
 }
 
-async function download(raw, redirects = 0) {
+async function download(raw, redirects = 0, dependencies = {}) {
     if (redirects > 4) throw new Error('Too many media source redirects');
-    const { url, address } = await publicTarget(raw);
+    const { url, address } = await publicTarget(raw, dependencies.resolve || lookup);
     const response = await new Promise((resolve, reject) => {
-        const request = https.get(url, {
+        const request = (dependencies.get || https.get)(url, {
             // Pin the validated DNS result, preventing rebinding at connect time.
             lookup: (_hostname, options, callback) => {
                 if (options?.all) callback(null, [address]);
                 else callback(null, address.address, address.family);
             },
-            headers: { Accept: 'image/*,video/*,audio/*,application/octet-stream;q=0.5', 'Accept-Encoding': 'identity' },
+            headers: { 'User-Agent': 'GenerativeAIStudio/1.0', Accept: 'image/*,video/*,audio/*,application/octet-stream;q=0.5', 'Accept-Encoding': 'identity' },
             signal: AbortSignal.timeout(5 * 60 * 1000),
         }, resolve);
         request.setTimeout(30_000, () => request.destroy(new Error('Media source timed out')));
@@ -88,7 +88,7 @@ async function download(raw, redirects = 0) {
     if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
         response.destroy();
         if (!response.headers.location) throw new Error('Media redirect has no location');
-        return download(new URL(response.headers.location, url).href, redirects + 1);
+        return download(new URL(response.headers.location, url).href, redirects + 1, dependencies);
     }
     if (response.statusCode !== 200) {
         response.destroy(); throw new Error('Media source download failed');
