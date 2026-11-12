@@ -32,6 +32,8 @@ Storage credentials remain in the separate storage.env and are unchanged.
 Missing provider key: verified staff see an administrator setup notice;
 provider requests return 503. Invalid Access JWT returns 401 even on localhost.
 
+See MEDIA-STORAGE.md for permanent media links and the archive timer.
+
 ## Workspace behavior
 
 The provider account, provider history, balance, and generated resources are

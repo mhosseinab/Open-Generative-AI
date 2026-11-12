@@ -1,8 +1,10 @@
+import { persistStaffUpload } from '../../../src/lib/staffMedia.mjs';
 import { isStaffMode, getStaffIdentity } from '../../../src/lib/staffAuth.mjs';
 import { NextResponse } from 'next/server';
 import { validateUploadProxyTarget, getApiKeyFromRequest, isBlockedFileType } from '../../../src/lib/uploadProxyTarget';
 
 export async function POST(request) {
+    if (isStaffMode()) return persistStaffUpload(request);
     try {
         const identity = isStaffMode() ? await getStaffIdentity(request) : null;
         const apiKey = identity || getApiKeyFromRequest(request);

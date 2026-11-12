@@ -4,6 +4,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 export class StaffAuthError extends Error {
     constructor(message, status = 401) { super(message); this.status = status; }
 }
+export const STAFF_MEDIA_OWNER = 'falak-studio-team';
 export const isStaffMode = () => process.env.STAFF_AUTH_MODE === 'cloudflare';
 let remoteKeys;
 let remoteIssuer;
@@ -54,7 +55,7 @@ export async function getProviderAuth(request) {
         const identity = await getStaffIdentity(request);
         const apiKey = await readProviderKey();
         if (!apiKey) throw new StaffAuthError('The shared AI provider key has not been configured by an administrator', 503);
-        return { ...identity, apiKey, ownerId: 'falak-studio-team' };
+        return { ...identity, apiKey, ownerId: STAFF_MEDIA_OWNER };
     }
     const apiKey = request.headers.get('x-api-key') || request.headers.get('authorization')?.replace(/^Bearer /, '');
     return { apiKey, ownerId: apiKey };

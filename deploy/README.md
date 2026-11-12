@@ -40,12 +40,12 @@ The upstream docker-compose.yml is not the hardened hosted configuration.
 Configure an explicit private S3-compatible bucket with VIDEO_STORAGE_ENDPOINT,
 VIDEO_STORAGE_REGION, VIDEO_STORAGE_BUCKET, VIDEO_STORAGE_ACCESS_KEY_ID,
 VIDEO_STORAGE_SECRET_ACCESS_KEY, and VIDEO_STORAGE_SIGNING_SECRET.
-Completed prediction-result polls stream videos into the bucket. Stable HMAC
-capability URLs refresh short-lived signed S3 playback URLs. Images and audio
-remain with the provider. Preserve the signing secret across upgrades.
-
-Archiving happens when the browser polls a completed job. Abandoned jobs are
-archived only if polled again. Objects are retained until explicitly deleted.
+Uploads and generated image/video/audio media are retained in the bucket. Stable
+application URLs stream saved media with ranges and do not expire; browsers never
+receive temporary S3 redirects. Server-only signed URLs are used for AI inputs.
+Preserve the signing secret across upgrades. S3 manifests provide durable history,
+and the included timer backfills completed predictions every five minutes. See
+MEDIA-STORAGE.md for migration, verification, retention and failure handling.
 Staff share the provider account and generated resources; no per-staff billing
 or resource isolation is implemented.
 

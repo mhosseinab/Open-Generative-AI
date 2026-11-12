@@ -20,7 +20,7 @@
     "build:workflow": "npm run build -w workflow-builder",
     "build:agent": "npm run build -w ai-agent",
     "build:design": "npm run build -w design-agent",
-    "build:packages": "npm run build:workflow && npm run build:agent && npm run build:design && npm run build:studio",
+    "build:packages": "node scripts/apply-hosted-patches.cjs && npm run build:workflow && npm run build:agent && npm run build:design && npm run build:studio",
     "setup": "git submodule update --init --recursive && npm install && npm run build:packages",
     "vite:dev": "vite",
     "vite:build": "vite build",

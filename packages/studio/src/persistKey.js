@@ -18,14 +18,14 @@ export function scopedPersistKey(baseKey, apiKey) {
 // One-time best-effort carryover from the old shared (unscoped) key into the
 // current identity's scoped key, then clears the old key so the next different
 // identity on this browser doesn't inherit (or re-leak) it.
-export function migrateLegacyPersistKey(baseKey, scopedKey) {
+export function migrateLegacyPersistKey(baseKey, scopedKey, storage = globalThis.localStorage) {
   if (scopedKey === baseKey) return;
   try {
-    if (localStorage.getItem(scopedKey)) return; // already migrated
-    const legacy = localStorage.getItem(baseKey);
+    if (storage.getItem(scopedKey)) return; // already migrated
+    const legacy = storage.getItem(baseKey);
     if (legacy) {
-      localStorage.setItem(scopedKey, legacy);
-      localStorage.removeItem(baseKey);
+      storage.setItem(scopedKey, legacy);
+      storage.removeItem(baseKey);
     }
   } catch {
     // localStorage unavailable (SSR/private mode) — nothing to migrate

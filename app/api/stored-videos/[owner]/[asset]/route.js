@@ -1,3 +1,4 @@
+import { streamStoredMedia } from '../../../../../src/lib/mediaResponse.mjs';
 import { isStaffMode, getStaffIdentity } from '../../../../../src/lib/staffAuth.mjs';
 import { NextResponse } from 'next/server';
 import videoStorage from '../../../../../src/lib/videoStorage.cjs';
@@ -19,12 +20,7 @@ export async function GET(request, { params }) {
     }
     try {
         const store = await videoStorage.s3Store(settings);
-        if (!await store.exists(key)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        // The stable capability URL survives browser history; only this S3 URL expires.
-        const response = NextResponse.redirect(await store.signedGet(key, request.method), 307);
-        response.headers.set('Cache-Control', 'private, no-store');
-        response.headers.set('Referrer-Policy', 'no-referrer');
-        return response;
+        return await streamStoredMedia(request, key, store);
     } catch {
         return NextResponse.json({ error: 'Video storage temporarily unavailable' }, { status: 503 });
     }

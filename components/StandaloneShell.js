@@ -11,6 +11,7 @@ const DesignAgentStudio = dynamic(() => import('studio').then(mod => mod.DesignA
 });
 import axios from 'axios';
 import ApiKeyModal from './ApiKeyModal';
+import { restoreDurableMedia, rewritePersistentMedia, collectLegacyMediaSources, importLegacyMediaSources } from '../packages/studio/src/durableMedia.js';
 import { getCommonCopy, getLocaleConfig, localizeStudioPath } from '@/lib/locales';
 
 // Tab/category ids, icons, and English `label` fallbacks are stable
@@ -343,6 +344,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   const [apiKey, setApiKey] = useState(null);
   const [staffSession, setStaffSession] = useState(null);
   const [sessionError, setSessionError] = useState(null);
+  const [archiveFailureCount, setArchiveFailureCount] = useState(0);
   const [activeTab, setActiveTab] = useState(getInitialTab());
 
   const [balance, setBalance] = useState(null);
@@ -585,8 +587,23 @@ export default function StandaloneShell({ locale = 'en' }) {
           localStorage.removeItem('token');
           sessionStorage.removeItem('wl_workflow_token');
           document.cookie = 'muapi_key=; path=/; max-age=0; SameSite=Lax';
+          const identity = { staffMode: true, email: session.email };
+          const catalogResponse = await fetch('/api/media-catalog', { cache: 'no-store' });
+          if (!catalogResponse.ok) throw new Error('The saved media archive is temporarily unavailable. Please reload Studio.');
+          let catalog = await catalogResponse.json();
+          if (!catalog || !catalog.links || typeof catalog.links !== 'object' || Array.isArray(catalog.links) || !Array.isArray(catalog.items)) {
+            throw new Error('The saved media archive returned an invalid response. Please reload Studio.');
+          }
+          if (cancelled) return;
+          const sources = collectLegacyMediaSources(localStorage, identity, catalog.links, loadStoredNotifications());
+          const imported = await importLegacyMediaSources(sources, catalog);
+          if (cancelled) return;
+          catalog = imported.catalog;
+          setArchiveFailureCount(imported.failures.length);
+          restoreDurableMedia(localStorage, identity, catalog);
+          setNotifications(previous => rewritePersistentMedia(previous, catalog.links));
           setStaffSession(session);
-          setApiKey({ staffMode: true, email: session.email });
+          setApiKey(identity);
           if (session.providerConfigured) void fetchBalance({ staffMode: true, email: session.email });
         } else {
           const stored = localStorage.getItem(STORAGE_KEY);
@@ -700,6 +717,7 @@ export default function StandaloneShell({ locale = 'en' }) {
   if (sessionError) {
     return <div className="h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6" role="alert">
       <p>{sessionError}</p>
+      <button onClick={() => window.location.reload()} className="underline">Reload Studio</button>
       <a href="/cdn-cgi/access/logout" className="underline">Sign in again</a>
     </div>;
   }
@@ -1040,13 +1058,19 @@ export default function StandaloneShell({ locale = 'en' }) {
     </div>
 
       {/* Global generation activity and notification stack */}
-      {(activeGenerations.length > 0 || notifications.length > 0) && (
+      {(activeGenerations.length > 0 || notifications.length > 0 || archiveFailureCount > 0) && (
         <div
           aria-live="polite"
           aria-label={copy.notifications.ariaLabel}
           className="fixed top-16 right-5 z-[200] flex max-h-[calc(100vh-80px)] w-[340px] max-w-[calc(100vw-32px)] flex-col gap-2 overflow-x-hidden overflow-y-auto global-notif-stack pointer-events-none"
           data-testid="global-notification-stack"
         >
+          {archiveFailureCount > 0 && (
+            <div role="status" className="pointer-events-auto rounded-xl border border-amber-400/50 bg-zinc-950 px-4 py-3 text-sm text-amber-100 shadow-lg">
+              <p>Some older media could not be archived ({archiveFailureCount}). Re-upload missing originals to keep using them.</p>
+              <button className="mt-2 text-xs underline" onClick={() => setArchiveFailureCount(0)}>Dismiss</button>
+            </div>
+          )}
           {activeGenerations.map((generation) => (
             <div
               key={generation.tabId}

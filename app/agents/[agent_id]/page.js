@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { isStaffMode, getStaffIdentity, getProviderAuth } from "../../../src/lib/staffAuth.mjs";
+import mediaStorage from "../../../src/lib/videoStorage.cjs";
 import AgentChatClient from "./AgentChatClient";
 
 /**
@@ -73,6 +74,7 @@ export default async function AgentPage({ params }) {
   const staffMode = isStaffMode();
   let identity = null;
   let apiKey = null;
+  let ownerId = null;
   if (staffMode) {
     const request = { headers: await headers() };
     try {
@@ -81,7 +83,7 @@ export default async function AgentPage({ params }) {
       return <p role="alert">Your staff session is invalid or expired. Sign in through Cloudflare Access again.</p>;
     }
     try {
-      ({ apiKey } = await getProviderAuth(request));
+      ({ apiKey, ownerId } = await getProviderAuth(request));
     } catch {
       // Allow the staff interface to load while an administrator installs the provider key.
     }
@@ -92,10 +94,19 @@ export default async function AgentPage({ params }) {
 
   console.log(`[AgentPage] Loading page for agent: ${agent_id}, hasKey: ${!!apiKey}`);
 
-  const [agentDetails, userData] = await Promise.all([
+  let [agentDetails, userData] = await Promise.all([
     fetchAgentDetails(agent_id, apiKey),
     fetchUserData(apiKey)
   ]);
+
+  if (apiKey) {
+    try {
+      // Resolve previously archived user media without copying static template artwork.
+      agentDetails = await mediaStorage.rewriteArchivedLinks(agentDetails, { apiKey: ownerId || apiKey });
+    } catch {
+      return <p role="alert">Saved media is temporarily unavailable. Please reload to retry.</p>;
+    }
+  }
 
   return (
     <AgentChatClient 

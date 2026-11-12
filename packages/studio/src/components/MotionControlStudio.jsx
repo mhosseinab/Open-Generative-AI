@@ -558,6 +558,7 @@ export default function MotionControlStudio({
   const copy = resolveCopy(en, zh, locale);
   const LEGACY_PERSIST_KEY = "hg_motion_control_studio_persistent";
   const PERSIST_KEY = scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
+  const ASSETS_KEY = scopedPersistKey("hg_motion_control_assets", apiKey);
 
   useEffect(() => {
     migrateLegacyPersistKey(LEGACY_PERSIST_KEY, PERSIST_KEY);
@@ -626,7 +627,8 @@ export default function MotionControlStudio({
   const [assetVideos, setAssetVideos] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_motion_control_assets");
+        migrateLegacyPersistKey("hg_motion_control_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) return JSON.parse(stored).videos || [];
       } catch {}
     }
@@ -636,7 +638,8 @@ export default function MotionControlStudio({
   const [assetImages, setAssetImages] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_motion_control_assets");
+        migrateLegacyPersistKey("hg_motion_control_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) return JSON.parse(stored).images || [];
       } catch {}
     }
@@ -646,7 +649,8 @@ export default function MotionControlStudio({
   const [assetResults, setAssetResults] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_motion_control_assets");
+        migrateLegacyPersistKey("hg_motion_control_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) return JSON.parse(stored).results || [];
       } catch {}
     }
@@ -656,7 +660,7 @@ export default function MotionControlStudio({
   const saveAssets = (v, i, r) => {
     try {
       localStorage.setItem(
-        "hg_motion_control_assets",
+        ASSETS_KEY,
         JSON.stringify({ videos: v, images: i, results: r })
       );
     } catch {}

@@ -38,17 +38,19 @@ try {
         await new Promise(resolve => setTimeout(resolve, 250));
     }
     assert.ok(ready, 'Container did not become ready');
-    for (const path of ['/api/staff-session', '/api/api/v1/account/balance', '/api/v1/account/balance', '/api/agents/user/agents', '/api/workflow/get-workflow-defs']) {
+    for (const path of ['/api/staff-session', '/api/api/v1/account/balance', '/api/v1/account/balance', '/api/agents/templates/agents', '/api/workflow/get-template-workflows']) {
         const response = await fetch(base + path, { headers });
         assert.equal(response.status, 200, `${path}: ${await response.text()}`);
     }
     assert.equal((await fetch(base + '/api/staff-session')).status, 401);
+    assert.equal((await fetch(base + '/api/media-catalog')).status, 401);
     assert.equal((await fetch(base + '/api/staff-session', { headers: { 'cf-access-jwt-assertion': token({ aud: 'wrong-app' }) } })).status, 401);
     assert.equal((await fetch(base + '/api/api/v1/keys', { headers })).status, 403);
     assert.equal((await fetch(base + '/api/api/v1/nano-banana', { method: 'POST', headers: { ...headers, origin: 'https://other.example' }, body: '{}' })).status, 403);
     const thumbnail = await fetch(base + '/_next/image?url=%2Fassets%2Flayers%2Fsample.webp&w=64&q=75');
     assert.equal(thumbnail.status, 200);
     assert.match(thumbnail.headers.get('content-type'), /^image\//);
+    docker('exec', container, 'node', '-e', "Promise.all(['@aws-sdk/client-s3','@aws-sdk/lib-storage','@aws-sdk/s3-request-presigner'].map(name => import(name))).catch(() => process.exit(1))");
     const user = docker('exec', container, 'node', '-e', 'console.log(process.getuid())');
     assert.equal(user, '1000');
     console.log('Container smoke passed: pages, sharp, staff JWT, rewritten APIs, key isolation, denial paths, read-only non-root runtime');

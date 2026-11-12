@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { isStaffMode, getStaffIdentity, getProviderAuth } from "../../../../src/lib/staffAuth.mjs";
+import mediaStorage from "../../../../src/lib/videoStorage.cjs";
 import AgentChatClient from "../AgentChatClient";
 
 /**
@@ -94,6 +95,7 @@ export default async function AgentConversationPage({ params }) {
   const staffMode = isStaffMode();
   let identity = null;
   let apiKey = null;
+  let ownerId = null;
   if (staffMode) {
     const request = { headers: await headers() };
     try {
@@ -102,7 +104,7 @@ export default async function AgentConversationPage({ params }) {
       return <p role="alert">Your staff session is invalid or expired. Sign in through Cloudflare Access again.</p>;
     }
     try {
-      ({ apiKey } = await getProviderAuth(request));
+      ({ apiKey, ownerId } = await getProviderAuth(request));
     } catch {
       // Allow the staff interface to load while an administrator installs the provider key.
     }
@@ -113,11 +115,26 @@ export default async function AgentConversationPage({ params }) {
 
   console.log(`[ConvPage] Loading for agent: ${agent_id}, conv: ${conversation_id}, hasKey: ${!!apiKey}`);
 
-  const [agentDetails, initialHistory, userData] = await Promise.all([
+  let [agentDetails, initialHistory, userData] = await Promise.all([
     fetchAgentDetails(agent_id, apiKey),
     fetchHistory(agent_id, conversation_id, apiKey),
     fetchUserData(apiKey)
   ]);
+
+  if (apiKey) {
+    try {
+      const mediaOptions = {
+        apiKey: ownerId || apiKey,
+        requestId: `agent-conversation:${agent_id}:${conversation_id}`,
+      };
+      // Server-rendered conversations bypass the API proxy, so archive their media here.
+      initialHistory = await mediaStorage.archiveMediaFields(initialHistory, mediaOptions);
+      initialHistory = await mediaStorage.rewriteArchivedLinks(initialHistory, mediaOptions);
+      agentDetails = await mediaStorage.rewriteArchivedLinks(agentDetails, mediaOptions);
+    } catch {
+      return <p role="alert">Saved conversation media is temporarily unavailable. Please reload to retry.</p>;
+    }
+  }
 
   return (
     <AgentChatClient 

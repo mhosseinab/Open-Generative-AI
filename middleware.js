@@ -28,7 +28,7 @@ export function middleware(request) {
 
     // Staff requests always use the verified, server-key proxy, never external rewrites.
     if (process.env.STAFF_AUTH_MODE === 'cloudflare' && url.pathname.startsWith('/api/')) {
-        const local = ['/api/staff-session', '/api/staff-proxy', '/api/upload-binary', '/api/v1/upload-binary'];
+        const local = ['/api/staff-session', '/api/media-catalog', '/api/staff-proxy', '/api/upload-binary', '/api/v1/upload-binary'];
         if (!local.includes(url.pathname) && !url.pathname.startsWith('/api/stored-videos/')) {
             const target = url.clone();
             target.searchParams.set('__studio_path', url.pathname);

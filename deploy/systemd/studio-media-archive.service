@@ -1,0 +1,11 @@
+[Unit]
+Description=Archive completed Studio media into private Hetzner S3
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/open-generative-ai
+ExecStart=/usr/bin/docker compose exec -T app node scripts/archive-existing-media.cjs
+TimeoutStartSec=1800
+Nice=10

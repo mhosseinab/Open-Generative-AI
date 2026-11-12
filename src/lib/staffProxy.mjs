@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { mediaOptions, persistUpload, persistProviderResponse, translateMediaInputs, canonicalMediaKey } from './staffMedia.mjs';
 import { isStaffMode, getProviderAuth, upstreamHeaders, StaffAuthError } from './staffAuth.mjs';
 import videoStorage from './videoStorage.cjs';
 import * as catalog from '../../packages/studio/src/models.js';
@@ -39,18 +41,60 @@ export async function proxyStaffRequest(request) {
         if (!originalPath) throw new StaffAuthError('Invalid API path', 400);
         incoming.searchParams.delete('__studio_path');
         const target = providerTarget(originalPath, request.method, incoming.search);
-        const body = ['GET','HEAD'].includes(request.method) ? undefined : await request.arrayBuffer();
+        const prediction = /^\/api\/v1\/predictions\/([^/]+)\/result$/.exec(target.pathname);
+        if (request.method === 'POST' && target.pathname === '/api/v1/upload_file') return persistUpload(request, auth);
+        if (target.pathname === '/app/get_file_upload_url') {
+            mediaOptions(auth);
+            return Response.json({ url: '/api/upload-binary', fields: {} }, { headers });
+        }
+        if (prediction && request.method === 'GET') {
+            const options = mediaOptions(auth);
+            if (await videoStorage.isArchivedResultDeleted(prediction[1], options)) return Response.json({ error: 'Media was removed from history' }, { status: 404, headers });
+            const cached = await videoStorage.getArchivedResult(prediction[1], options);
+            if (cached) return Response.json(cached, { headers });
+        }
+        const isHistory = target.pathname === '/api/v1/history' && request.method === 'GET';
+        if (isHistory) {
+            // The durable catalog has its own cursor; never send it to MuAPI.
+            return Response.json(await videoStorage.listArchivedHistory({ ...mediaOptions(auth), limit: incoming.searchParams.get('limit'), cursor: incoming.searchParams.get('cursor') }), { headers });
+        }
+        let body;
+        if (!['GET','HEAD'].includes(request.method)) {
+            if (request.headers.get('content-type')?.includes('application/json')) {
+                const raw = await request.text();
+                const input = raw ? JSON.parse(raw) : null;
+                if (target.pathname === '/workflow/cloudfront-signed-url') {
+                    const options = mediaOptions(auth);
+                    if (typeof input?.url !== 'string') throw new StaffAuthError('Missing media URL', 400);
+                    const media = await persistProviderResponse({ url: input.url }, auth, 'download:' + createHash('sha256').update(String(input.url)).digest('hex'));
+                    if (!canonicalMediaKey(media.url)) throw new StaffAuthError('Media has not been archived', 503);
+                    return Response.json({ signed_url: media.url, url: media.url }, { headers });
+                }
+                body = input == null ? undefined : JSON.stringify(await translateMediaInputs(input, auth));
+            } else body = await request.arrayBuffer();
+        }
         const upstream = await fetch(target, {
             method: request.method, headers: upstreamHeaders(request, auth.apiKey), body,
             redirect: 'error', cache: 'no-store',
         });
+        const deletion = /^\/api\/v1\/predictions\/([^/]+)\/media$/.exec(target.pathname);
+        if (deletion && request.method === 'DELETE' && (upstream.ok || upstream.status === 404)) {
+            await videoStorage.deleteArchivedResult(deletion[1], mediaOptions(auth));
+            return Response.json({ deleted: true }, { headers });
+        }
         if (upstream.status === 204) return new Response(null, { status: 204, headers });
         let data = await upstream.json();
-        const prediction = /^\/api\/v1\/predictions\/([^/]+)\/result$/.exec(target.pathname);
-        if (upstream.ok && prediction) data = await videoStorage.archivePredictionResult(data, { apiKey: auth.ownerId, requestId: prediction[1] });
-        if (upstream.ok && target.pathname === '/app/get_file_upload_url' && data.url) {
-            data.fields = { ...data.fields, 'x-proxy-target-url': data.url };
-            data.url = '/api/upload-binary';
+        if (upstream.ok && prediction) data = await videoStorage.archivePredictionResult(data, { ...mediaOptions(auth), requestId: prediction[1] });
+        const mediaResponse = /^\/(?:workflow|agents)\//.test(target.pathname) || target.pathname.startsWith('/api/v1/creative-agent/');
+        const templateResponse = /(?:templates|featured|suggest|skills|node-schemas|estimate-cost|get-template)/.test(target.pathname);
+        if (upstream.ok && mediaResponse && !templateResponse) {
+            data = await persistProviderResponse(data, auth, target.pathname);
+        }
+        const hasMedia = data && ['outputs', 'images', 'video', 'audio', 'url', 'output'].some(field => data[field]);
+        if (upstream.ok && request.method === 'POST' && target.pathname.startsWith('/api/v1/') && !mediaResponse && hasMedia) {
+            data = await videoStorage.archivePredictionResult({ ...data, status: data.status || 'completed' }, {
+                ...mediaOptions(auth), requestId: data.request_id || data.id || randomUUID(),
+            });
         }
         // Provider failures must not echo request credentials or infrastructure details.
         if (!upstream.ok) {

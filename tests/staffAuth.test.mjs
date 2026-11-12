@@ -5,6 +5,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verifyStaffToken, getProviderAuth, upstreamHeaders } from '../src/lib/staffAuth.mjs';
+import mediaStorage from '../src/lib/videoStorage.cjs';
 import { providerTarget, proxyStaffRequest, allowedProviderPath } from '../src/lib/staffProxy.mjs';
 
 const issuer = 'https://staff-test.cloudflareaccess.com';
@@ -54,14 +55,40 @@ test('staff proxy injects only server key, denies admin paths, and fails closed 
         assert.deepEqual(await response.json(), { balance:7 });
         assert.equal(upstreamCalls, 1);
         assert.equal((await proxyStaffRequest(new Request(request.url, {headers:{'cf-access-authenticated-user-email':'staff@example.com','x-api-key':'bypass'}}))).status,401);
+        const storageEnv = {
+            VIDEO_STORAGE_ENDPOINT:'https://s3.example.com', VIDEO_STORAGE_REGION:'test', VIDEO_STORAGE_BUCKET:'test',
+            VIDEO_STORAGE_ACCESS_KEY_ID:'fixture', VIDEO_STORAGE_SECRET_ACCESS_KEY:'fixture', VIDEO_STORAGE_SIGNING_SECRET:'x'.repeat(32),
+        };
+        const savedEnv = Object.fromEntries(Object.keys(storageEnv).map(name=>[name,process.env[name]]));
+        const originals = Object.fromEntries(['storeUploadedMedia','isArchivedResultDeleted','getArchivedResult','listArchivedHistory'].map(name=>[name,mediaStorage[name]]));
+        Object.assign(process.env,storageEnv,{STUDIO_PUBLIC_ORIGIN:'https://studio.example'});
+        try {
+            const durable = '/api/stored-videos/'+ 'a'.repeat(64)+'/'+ 'b'.repeat(64)+'?token='+ 'c'.repeat(64)+'&type=image';
+            mediaStorage.storeUploadedMedia=async(file,options)=>{assert.equal(options.apiKey,'falak-studio-team');assert.equal(file.name,'fixture.png');return durable;};
+            const form = new FormData();form.append('file',new Blob(['fixture'],{type:'image/png'}),'fixture.png');
+            const uploadResponse=await proxyStaffRequest(new Request('https://studio.example/api/staff-proxy?__studio_path=/api/api/v1/upload_file',{method:'POST',headers:{...headers,origin:'https://studio.example'},body:form}));
+            assert.equal(uploadResponse.status,200);assert.equal((await uploadResponse.json()).url,durable);
+            assert.equal(upstreamCalls,1,'S3 upload must never invoke MuAPI');
+            mediaStorage.isArchivedResultDeleted=async()=>false;
+            mediaStorage.getArchivedResult=async()=>({status:'completed',outputs:[durable]});
+            mediaStorage.listArchivedHistory=async()=>({items:[{request_id:'saved',output:{outputs:[durable]}}],next_cursor:null});
+            for(const path of ['/api/api/v1/predictions/saved/result','/api/api/v1/history']) {
+                const cached=await proxyStaffRequest(new Request('https://studio.example/api/staff-proxy?__studio_path='+encodeURIComponent(path),{headers}));
+                assert.equal(cached.status,200);
+            }
+            assert.equal(upstreamCalls,1,'Archived results and history must remain independent of MuAPI');
+        } finally {
+            Object.assign(mediaStorage,originals);
+            for(const [name,value] of Object.entries(savedEnv)) {if(value===undefined)delete process.env[name];else process.env[name]=value;}
+        }
         globalThis.fetch = async () => Response.json({ detail: { error: { code: 'INSUFFICIENT_CREDITS', message: 'provider details must not be reflected' } } }, { status: 403 });
-        const upload = new Request('https://studio.example/api/staff-proxy?__studio_path=/api/api/v1/upload_file', { method: 'POST', headers: { ...headers, origin: 'https://studio.example' }, body: 'fixture' });
+        const upload = new Request('https://studio.example/api/staff-proxy?__studio_path=/api/api/v1/nano-banana', { method: 'POST', headers: { ...headers, origin: 'https://studio.example', 'content-type':'application/json' }, body: '{"prompt":"test"}' });
         process.env.STUDIO_PUBLIC_ORIGIN = 'https://studio.example';
         const deniedUpload = await proxyStaffRequest(upload);
         assert.equal(deniedUpload.status, 402);
         const uploadError = await deniedUpload.json();
         assert.equal(uploadError.error, 'INSUFFICIENT_CREDITS');
-        assert.match(uploadError.detail, /positive credit balance.*sandbox uploads/);
+        assert.match(uploadError.detail, /shared MuAPI account.*insufficient credits/);
         assert.ok(!JSON.stringify(uploadError).includes('provider details'));
         await writeFile(file, '');
         assert.equal((await proxyStaffRequest(request)).status, 503);

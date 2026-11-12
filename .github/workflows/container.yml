@@ -30,6 +30,9 @@ jobs:
           node tests/staffAuth.test.mjs
           node tests/staff-client.test.mjs
           node tests/videoStorage.test.cjs
+          node tests/durableMedia.test.mjs
+          node tests/mediaResponse.test.mjs
+          node tests/hostedPatches.test.cjs
 
   publish:
     needs: test

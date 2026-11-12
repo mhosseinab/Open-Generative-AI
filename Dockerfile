@@ -44,6 +44,8 @@ COPY --from=build --chown=1000:1000 /app/.next/standalone ./
 COPY --from=build --chown=1000:1000 /app/.next/static ./.next/static
 COPY --from=build --chown=1000:1000 /app/public ./public
 COPY --from=build /app/LICENSE /app/LICENSE
+COPY --from=build --chown=1000:1000 /app/scripts/archive-existing-media.cjs ./scripts/archive-existing-media.cjs
+COPY --from=build --chown=1000:1000 /app/src/lib/videoStorage.cjs ./src/lib/videoStorage.cjs
 USER 1000:1000
 
 EXPOSE 3000
