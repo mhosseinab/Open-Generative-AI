@@ -32,3 +32,31 @@ services:
       options:
         max-size: 10m
         max-file: "3"
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.3@sha256:faa8e0a1475f137c910be6025f43c8e4092fdd35461b31e19fd1390657a1ff39
+    restart: unless-stopped
+    user: 65532:65532
+    command:
+    - tunnel
+    - --no-autoupdate
+    - --metrics
+    - 0.0.0.0:2000
+    - run
+    - --token-file
+    - /run/secrets/cloudflared_token
+    volumes:
+    - ./secrets/cloudflared_token:/run/secrets/cloudflared_token:ro
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
