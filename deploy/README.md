@@ -15,8 +15,9 @@ GitHub initially makes new container packages private. Change package visibility
 in GitHub package settings if anonymous pulls are desired. Use an image digest
 for deployment; do not automatically deploy a moving tag.
 
-Pull requests run tests without publishing. Pushes to main or the maintained
-staff-studio branch publish images after checks. No workflow logs into a server,
+The workflow runs only when manually dispatched. Pushes and pull requests do not
+start tests or image publication. A manual run tests, builds and publishes the
+selected revision. No workflow logs into a server,
 receives application credentials, or deploys to production.
 
 ## Runtime
