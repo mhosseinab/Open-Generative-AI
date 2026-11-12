@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { isStaffMode, getStaffIdentity, getProviderAuth } from "../../../src/lib/staffAuth.mjs";
 import AgentChatClient from "./AgentChatClient";
 
 /**
@@ -22,9 +23,9 @@ async function fetchAgentDetails(agentId, apiKey) {
   
   // Try fetching by slug first
   try {
-    console.log(`[AgentPage] Fetching agent by slug: ${agentId}`);
+    console.log(`[AgentPage] Fetching agent by slug: ${encodeURIComponent(agentId)}`);
     const res = await fetch(
-      `${BASE_URL}/agents/by-slug/${agentId}`,
+      `${BASE_URL}/agents/by-slug/${encodeURIComponent(agentId)}`,
       {
         cache: "no-store",
         headers: { "x-api-key": apiKey },
@@ -34,9 +35,9 @@ async function fetchAgentDetails(agentId, apiKey) {
     
     // If by-slug fails, try fetching by direct ID (if it looks like a UUID)
     if (agentId.length > 20) {
-      console.log(`[AgentPage] Fetch by slug failed, trying by ID: ${agentId}`);
+      console.log(`[AgentPage] Fetch by slug failed, trying by ID: ${encodeURIComponent(agentId)}`);
       const resId = await fetch(
-        `${BASE_URL}/agents/${agentId}`,
+        `${BASE_URL}/agents/${encodeURIComponent(agentId)}`,
         {
           cache: "no-store",
           headers: { "x-api-key": apiKey },
@@ -45,7 +46,7 @@ async function fetchAgentDetails(agentId, apiKey) {
       if (resId.ok) return await resId.json();
     }
     
-    console.warn(`[AgentPage] Failed to fetch agent details for: ${agentId}`);
+    console.warn(`[AgentPage] Failed to fetch agent details for: ${encodeURIComponent(agentId)}`);
     return null;
   } catch (error) {
     console.error("[AgentPage] Fetch error:", error);
@@ -69,8 +70,25 @@ async function fetchUserData(apiKey) {
 
 export default async function AgentPage({ params }) {
   const { agent_id } = await params;
-  const cookieStore = await cookies();
-  const apiKey = cookieStore.get("muapi_key")?.value;
+  const staffMode = isStaffMode();
+  let identity = null;
+  let apiKey = null;
+  if (staffMode) {
+    const request = { headers: await headers() };
+    try {
+      identity = await getStaffIdentity(request);
+    } catch {
+      return <p role="alert">Your staff session is invalid or expired. Sign in through Cloudflare Access again.</p>;
+    }
+    try {
+      ({ apiKey } = await getProviderAuth(request));
+    } catch {
+      // Allow the staff interface to load while an administrator installs the provider key.
+    }
+  } else {
+    const cookieStore = await cookies();
+    apiKey = cookieStore.get("muapi_key")?.value;
+  }
 
   console.log(`[AgentPage] Loading page for agent: ${agent_id}, hasKey: ${!!apiKey}`);
 
@@ -83,7 +101,12 @@ export default async function AgentPage({ params }) {
     <AgentChatClient 
       agentDetails={agentDetails} 
       initialHistory={null} 
-      userData={userData}
+      userData={staffMode ? {
+        staffMode: true,
+        email: identity.email,
+        balance: Number(userData?.balance) || 0,
+        providerConfigured: Boolean(apiKey),
+      } : userData}
     />
   );
 }

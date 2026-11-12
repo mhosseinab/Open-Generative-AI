@@ -5,11 +5,12 @@
 // unrelated accounts on a shared device.
 export function scopedPersistKey(baseKey, apiKey) {
   if (!apiKey) return baseKey;
+  const identity = apiKey.staffMode ? `staff:${apiKey.email}` : apiKey;
   // Short, stable hash — avoids putting a raw session token/API key verbatim
   // into a localStorage key name.
   let hash = 0;
-  for (let i = 0; i < apiKey.length; i++) {
-    hash = (hash * 31 + apiKey.charCodeAt(i)) | 0;
+  for (let i = 0; i < identity.length; i++) {
+    hash = (hash * 31 + identity.charCodeAt(i)) | 0;
   }
   return `${baseKey}:${(hash >>> 0).toString(36)}`;
 }

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { getLocaleFromPathname } from './lib/locales';
 
 function addSecurityHeaders(response) {
+    // Exact private-storage origin; bucket CORS also permits only this app.
+    const storageOrigin = process.env.VIDEO_STORAGE_ENDPOINT ? new URL(process.env.VIDEO_STORAGE_ENDPOINT).origin : '';
     // Prevent MIME type sniffing (CWE-693)
     response.headers.set('X-Content-Type-Options', 'nosniff');
     // Prevent clickjacking (CWE-1021)
@@ -16,13 +18,27 @@ function addSecurityHeaders(response) {
     // and other muapi subdomains that the renderer fetches directly.
     response.headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://muapi.ai https://*.muapi.ai; font-src 'self' data:;"
+        `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; connect-src 'self' https://muapi.ai https://*.muapi.ai ${storageOrigin}; font-src 'self' data:;`
     );
     return response;
 }
 
 export function middleware(request) {
     const url = request.nextUrl;
+
+    // Staff requests always use the verified, server-key proxy, never external rewrites.
+    if (process.env.STAFF_AUTH_MODE === 'cloudflare' && url.pathname.startsWith('/api/')) {
+        const local = ['/api/staff-session', '/api/staff-proxy', '/api/upload-binary', '/api/v1/upload-binary'];
+        if (!local.includes(url.pathname) && !url.pathname.startsWith('/api/stored-videos/')) {
+            const target = url.clone();
+            target.searchParams.set('__studio_path', url.pathname);
+            target.pathname = '/api/staff-proxy';
+            const headers = new Headers(request.headers);
+            headers.set('x-studio-api-path', url.pathname);
+            return addSecurityHeaders(NextResponse.rewrite(target, { request: { headers } }));
+        }
+        return addSecurityHeaders(NextResponse.next());
+    }
 
     // Catch requests to /api/workflow, /api/app, and /api/v1
     const isMuApi = url.pathname.startsWith('/api/workflow') ||
@@ -31,7 +47,8 @@ export function middleware(request) {
 
     if (isMuApi) {
         // Exclude paths that have their own dedicated route handlers with custom logic
-        const isHandledByRoute = url.pathname.startsWith('/api/v1/creative-agent') ||
+        const isHandledByRoute = /^\/api\/v1\/predictions\/[^/]+\/result$/.test(url.pathname) ||
+                                url.pathname.startsWith('/api/v1/creative-agent') ||
                                 url.pathname.startsWith('/api/v1/get_upload_url') ||
                                 url.pathname.startsWith('/api/v1/upload-binary');
 

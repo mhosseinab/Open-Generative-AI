@@ -36,3 +36,7 @@ out/
 .env
 .env.*
 !.env.example
+
+# Runtime credentials and browser QA output
+secrets/
+.playwright-mcp/

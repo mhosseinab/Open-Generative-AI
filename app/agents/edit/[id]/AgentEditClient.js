@@ -11,6 +11,11 @@ export default function AgentEditClient({ userData }) {
   const interceptorRef = useRef(null);
 
   useEffect(() => {
+    if (userData?.staffMode) {
+      localStorage.removeItem(STORAGE_KEY);
+      document.cookie = 'muapi_key=; path=/; max-age=0; SameSite=Lax';
+      return;
+    }
     const getKey = () => {
       if (typeof window === "undefined") return null;
       const fromStorage = localStorage.getItem(STORAGE_KEY);
@@ -37,7 +42,7 @@ export default function AgentEditClient({ userData }) {
         axios.interceptors.request.eject(interceptorRef.current);
       }
     };
-  }, []);
+  }, [userData?.staffMode]);
 
   const useUser = useCallback(
     () => ({

@@ -260,7 +260,6 @@ const NAVIGATION_CATEGORIES = [
   }
 ];
 
-const EXPLORE_APPS_TAB = TABS.find((tab) => tab.id === 'apps');
 
 const getNavigationCategory = (tabId) => (
   NAVIGATION_CATEGORIES.find((category) => category.tabIds.includes(tabId))
@@ -342,16 +341,14 @@ export default function StandaloneShell({ locale = 'en' }) {
   };
   
   const [apiKey, setApiKey] = useState(null);
+  const [staffSession, setStaffSession] = useState(null);
+  const [sessionError, setSessionError] = useState(null);
   const [activeTab, setActiveTab] = useState(getInitialTab());
 
   const [balance, setBalance] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [hasMounted, setHasMounted] = useState(false);
-  const [showVadooBanner, setShowVadooBanner] = useState(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem('vadoo_banner_dismissed') !== '1';
-    return true;
-  });
 
   // Sidebar Collapsed & Mobile Drawer State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -575,22 +572,47 @@ export default function StandaloneShell({ locale = 'en' }) {
   }, [activeTab]);
 
   useEffect(() => {
-    setHasMounted(true);
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      setApiKey(stored);
-      fetchBalance(stored);
-      // Sync cookie immediately on mount to establish identity for background requests
-      document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
+    let cancelled = false;
+    async function loadSession() {
+      try {
+        const response = await fetch('/api/staff-session', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Your staff login could not be verified. Please sign in again.');
+        const session = await response.json();
+        if (cancelled) return;
+        if (session.staffMode) {
+          // This identity marker only enables studio controls; it is not a credential.
+          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem('token');
+          sessionStorage.removeItem('wl_workflow_token');
+          document.cookie = 'muapi_key=; path=/; max-age=0; SameSite=Lax';
+          setStaffSession(session);
+          setApiKey({ staffMode: true, email: session.email });
+          if (session.providerConfigured) void fetchBalance({ staffMode: true, email: session.email });
+        } else {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            setApiKey(stored);
+            void fetchBalance(stored);
+            document.cookie = `muapi_key=${stored}; path=/; max-age=31536000; SameSite=Lax`;
+          }
+        }
+      } catch (error) {
+        if (!cancelled) setSessionError(error.message);
+      } finally {
+        if (!cancelled) setHasMounted(true);
+      }
     }
+    void loadSession();
+    return () => { cancelled = true; };
   }, [fetchBalance]);
 
   const handleKeySave = useCallback((key) => {
+    if (staffSession) return;
     localStorage.setItem(STORAGE_KEY, key);
     setApiKey(key);
     fetchBalance(key);
     document.cookie = `muapi_key=${key}; path=/; max-age=31536000; SameSite=Lax`;
-  }, [fetchBalance]);
+  }, [fetchBalance, staffSession]);
 
   const handleKeyChange = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
@@ -605,7 +627,7 @@ export default function StandaloneShell({ locale = 'en' }) {
     // Safety: Clear any global defaults that might have been set previously
     delete axios.defaults.headers.common['x-api-key'];
 
-    if (!apiKey) return;
+    if (!apiKey || staffSession) return;
 
     const interceptorId = axios.interceptors.request.use((config) => {
       // Check if URL is local/proxied
@@ -622,14 +644,14 @@ export default function StandaloneShell({ locale = 'en' }) {
     return () => {
       axios.interceptors.request.eject(interceptorId);
     };
-  }, [apiKey]);
+  }, [apiKey, staffSession]);
 
   // Poll for balance every 30 seconds if key is present
   useEffect(() => {
-    if (!apiKey) return;
+    if (!apiKey || (staffSession && !staffSession.providerConfigured)) return;
     const interval = setInterval(() => fetchBalance(apiKey), 30000);
     return () => clearInterval(interval);
-  }, [apiKey, fetchBalance]);
+  }, [apiKey, fetchBalance, staffSession]);
 
   // Drag and Drop Handlers
   const handleDragOver = useCallback((e) => {
@@ -675,6 +697,22 @@ export default function StandaloneShell({ locale = 'en' }) {
     </div>
   );
 
+  if (sessionError) {
+    return <div className="h-screen bg-black text-white flex flex-col items-center justify-center gap-4 p-6" role="alert">
+      <p>{sessionError}</p>
+      <a href="/cdn-cgi/access/logout" className="underline">Sign in again</a>
+    </div>;
+  }
+
+  if (staffSession && !staffSession.providerConfigured) {
+    return <div className="h-screen bg-black text-white flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <h1 className="text-xl font-semibold">You’re signed in</h1>
+      <p>AI generation is waiting for an administrator to configure the shared provider key.</p>
+      <p className="text-sm text-white/60">You do not need a personal API key.</p>
+      <button onClick={() => window.location.reload()} className="underline">Check again</button>
+    </div>;
+  }
+
   if (!apiKey) {
     return <ApiKeyModal onSave={handleKeySave} locale={locale} />;
   }
@@ -701,30 +739,6 @@ export default function StandaloneShell({ locale = 'en' }) {
               <span className="text-sm text-white/40">{copy.shell.dropHereHint}</span>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Vadoo promo banner */}
-      {showVadooBanner && (
-        <div className="flex-shrink-0 w-full bg-indigo-600 flex items-center justify-center px-4 py-2 gap-3 relative z-50">
-          <a
-            href="https://vadoo.tv"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[13px] font-bold text-white hover:opacity-80 transition-opacity text-center"
-          >
-            {copy.shell.vadooPromo}
-          </a>
-          <button
-            onClick={() => {
-              setShowVadooBanner(false);
-              localStorage.setItem('vadoo_banner_dismissed', '1');
-            }}
-            className="absolute right-3 text-white/60 hover:text-white transition-colors text-lg leading-none"
-            aria-label={copy.shell.dismiss}
-          >
-            ✕
-          </button>
         </div>
       )}
 
@@ -781,7 +795,7 @@ export default function StandaloneShell({ locale = 'en' }) {
                 </svg>
               </div>
               <span className="text-sm font-bold tracking-tight hidden sm:block text-white">
-                {copy.shell.brand}
+                GenerativeAIStudio
               </span>
             </div>
           </div>
@@ -803,7 +817,7 @@ export default function StandaloneShell({ locale = 'en' }) {
               </span>
             </div>
 
-            <button
+            {staffSession ? <span className="text-xs text-white/60 max-w-48 truncate" title={staffSession.email}>{staffSession.email}</span> : <button
               onClick={() => setShowSettings(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] font-bold text-white/80 hover:text-white hover:bg-white/10 hover:border-white/20 transition-colors"
               aria-label={copy.shell.settings}
@@ -813,7 +827,7 @@ export default function StandaloneShell({ locale = 'en' }) {
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
               <span className="hidden sm:inline">{copy.shell.settings}</span>
-            </button>
+            </button>}
           </div>
         </header>
       )}
@@ -940,35 +954,7 @@ export default function StandaloneShell({ locale = 'en' }) {
                 })}
               </div>
 
-              {EXPLORE_APPS_TAB && (
-                <div className="mt-3 pt-3 border-t border-white/[0.07]">
-                  <a
-                    href={studioPath(EXPLORE_APPS_TAB.id)}
-                    onClick={(event) => handleNavigationItemClick(event, EXPLORE_APPS_TAB.id)}
-                    aria-current={activeTab === EXPLORE_APPS_TAB.id ? 'page' : undefined}
-                    aria-label={tabLabel(EXPLORE_APPS_TAB.id)}
-                    title={isSidebarCollapsed && !isMobileOpen ? tabLabel(EXPLORE_APPS_TAB.id) : undefined}
-                    className={`
-                      group relative flex items-center rounded-xl transition-all duration-150 text-[13px] font-semibold
-                      ${isSidebarCollapsed && !isMobileOpen ? 'h-11 w-11 justify-center mx-auto' : 'px-3 py-2.5 w-full gap-3'}
-                      ${activeTab === EXPLORE_APPS_TAB.id
-                        ? 'bg-gradient-to-r from-[#22d3ee]/15 to-purple-500/10 text-[#22d3ee] border border-[#22d3ee]/20'
-                        : 'text-white/60 hover:text-white hover:bg-white/[0.04] border border-transparent'
-                      }
-                    `}
-                  >
-                    {activeTab === EXPLORE_APPS_TAB.id && (
-                      <span className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-[#22d3ee] to-[#a855f7] rounded-r-full" />
-                    )}
-                    <span className={`flex-shrink-0 ${activeTab === EXPLORE_APPS_TAB.id ? 'text-[#22d3ee]' : 'text-white/50 group-hover:text-white'}`}>
-                      {EXPLORE_APPS_TAB.icon}
-                    </span>
-                    {(!isSidebarCollapsed || isMobileOpen) && (
-                      <span className="truncate">{tabLabel(EXPLORE_APPS_TAB.id)}</span>
-                    )}
-                  </a>
-                </div>
-              )}
+
             </nav>
           </aside>
         )}
@@ -1026,6 +1012,8 @@ export default function StandaloneShell({ locale = 'en' }) {
           {activeTab === 'design-agent' && (
             <DesignAgentStudio
               apiKey={apiKey}
+              userEmail={staffSession?.email}
+              balance={staffSession ? balance : undefined}
               isHeaderVisible={isHeaderVisible}
               onToggleHeader={setIsHeaderVisible}
               onGenerationStart={makeGenerationStartCallback('design-agent')}
@@ -1173,7 +1161,7 @@ export default function StandaloneShell({ locale = 'en' }) {
       `}</style>
 
       {/* Settings Modal */}
-      {showSettings && (
+      {showSettings && !staffSession && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in-up">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-xl p-8 w-full max-w-sm shadow-2xl">
             <h2 className="text-white font-bold text-lg mb-2">{copy.settingsModal.title}</h2>
