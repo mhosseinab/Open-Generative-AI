@@ -3,6 +3,7 @@
 Run one remotely managed Cloudflare Tunnel dedicated to Studio. Its cloudflared
 container lives beside the app in the same Compose project; it publishes no host
 ports and reaches the origin at http://app:3000 over the private Docker network.
+The app also publishes no host ports; diagnostics run through docker compose exec.
 
 1. Create a remotely managed tunnel in the same Cloudflare account.
 2. Configure ingress for the Studio hostname to http://app:3000, followed by a

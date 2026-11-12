@@ -27,7 +27,7 @@ remove the build block and set image to a verified GHCR digest. Runtime secrets
 remain on the host, never in the repository, image, or GitHub build environment.
 See STAFF-AUTH.md for the staff identity/provider-key configuration.
 
-The app listens on loopback port 3000 behind Cloudflare Tunnel and Access.
+The app publishes no host ports. Cloudflare Tunnel and Access provide entry.
 A dedicated cloudflared container on the same server routes to http://app:3000
 over the Compose network. No SSH forwarding or shared internal-tools tunnel is
 required. See TUNNEL.md for connector/token setup and verification.
