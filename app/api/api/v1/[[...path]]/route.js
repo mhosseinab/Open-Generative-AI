@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server';
+import videoStorage from '../../../../../src/lib/videoStorage.cjs';
+
+export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 const MUAPI_BASE = 'https://api.muapi.ai';
 
@@ -35,10 +39,15 @@ export async function GET(request, { params }) {
 
     try {
         const response = await fetch(targetUrl, { headers, method: 'GET' });
-        const data = await response.json();
-        return NextResponse.json(data, { status: response.status });
+        let data = await response.json();
+        const prediction = /^predictions\/([^/]+)\/result$/.exec(path);
+        if (response.ok && prediction) {
+            if (!apiKey) return NextResponse.json({ error: 'Missing API key' }, { status: 401 });
+            data = await videoStorage.archivePredictionResult(data, { apiKey, requestId: prediction[1] });
+        }
+        return NextResponse.json(data, { status: response.status, headers: { 'Cache-Control': 'no-store' } });
     } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Generation result or video storage temporarily unavailable; retry' }, { status: 503 });
     }
 }
 

@@ -1,5 +1,53 @@
 # Open Generative AI — Unrestricted Open-Source Alternative to AI Video Platforms
 
+## Hosted staff deployment
+
+This fork runs GenerativeAIStudio for internal staff. Cloudflare Access uses the
+existing **Email - Studio** OTP policy. Staff do not need personal API keys;
+the Studio backend uses the shared MuAPI key stored on the server. Models run
+on MuAPI, with no model hosting on the Studio server.
+
+```mermaid
+flowchart TD
+    Staff["Staff browser"] <--> OTP["Cloudflare Access<br/>Email - Studio OTP"]
+
+    subgraph Server["Studio server"]
+        Tunnel["Dedicated cloudflared tunnel"]
+        App["Studio backend<br/>Shared API key"]
+        Archive["Background archiver<br/>Every 5 minutes"]
+        Tunnel <--> App
+    end
+
+    OTP <--> Tunnel
+    App -->|"Generation request"| MuAPI["MuAPI"]
+    MuAPI -->|"Temporary output"| App
+    App -->|"Save uploads, outputs and history"| S3["Private Hetzner S3<br/>falak-ai-studio"]
+    S3 -->|"Stream saved media through Studio"| App
+    Archive -->|"Check completed predictions"| MuAPI
+    Archive -->|"Preserve completed outputs"| S3
+```
+
+- The dedicated tunnel runs on the Studio server and reaches the app over its
+  Docker network. The app publishes no host ports; no SSH forwarding is needed.
+- Uploads go directly to our private bucket. Generated image, video and audio
+  outputs are copied there before permanent Studio links are returned.
+- Stable `/api/stored-videos/…` links stream saved media through the authenticated
+  backend. Browsers do not receive expiring S3 redirects. Temporary signed S3
+  links are used only in backend requests when MuAPI needs a saved file as input.
+- S3 manifests retain completed prediction history independently of provider
+  retention. The five-minute archiver also preserves completed predictions when
+  a user closes Studio before polling finishes; it does not reconstruct abandoned
+  agent/workflow runs that are absent from provider prediction history.
+- The bucket has no automatic expiration. Keep its contents and the storage
+  signing secret across deployments so existing links continue to work.
+
+See [deployment setup](deploy/README.md), [staff authentication](deploy/STAFF-AUTH.md),
+[dedicated tunnel](deploy/TUNNEL.md), and [durable media storage](deploy/MEDIA-STORAGE.md)
+for configuration and operating details. Container builds and publication to GHCR
+remain manual-only.
+
+---
+
 [![Powered by MuAPI](https://img.shields.io/badge/Powered%20by-MuAPI-6366f1?style=flat-square&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNHYtNGgtMnYtMmg0djZoLTJ6bTAtOFY2aDJ2MmgtMnoiLz48L3N2Zz4=)](https://muapi.ai?utm_source=github&utm_medium=badge&utm_campaign=open-generative-ai)
 
 

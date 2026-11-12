@@ -492,6 +492,7 @@ export default function RecastStudio({
   const copy = resolveCopy(en, zh, locale);
   const LEGACY_PERSIST_KEY = "hg_recast_studio_persistent";
   const PERSIST_KEY = scopedPersistKey(LEGACY_PERSIST_KEY, apiKey);
+  const ASSETS_KEY = scopedPersistKey("hg_recast_studio_assets", apiKey);
   useEffect(() => {
     migrateLegacyPersistKey(LEGACY_PERSIST_KEY, PERSIST_KEY);
   }, [PERSIST_KEY]);
@@ -524,7 +525,8 @@ export default function RecastStudio({
   const [assetVideos, setAssetVideos] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_recast_studio_assets");
+        migrateLegacyPersistKey("hg_recast_studio_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) {
           const data = JSON.parse(stored);
           return data.videos || [];
@@ -537,7 +539,8 @@ export default function RecastStudio({
   const [assetImages, setAssetImages] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_recast_studio_assets");
+        migrateLegacyPersistKey("hg_recast_studio_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) {
           const data = JSON.parse(stored);
           return data.images || [];
@@ -550,7 +553,8 @@ export default function RecastStudio({
   const [assetResults, setAssetResults] = useState(() => {
     if (typeof window !== "undefined") {
       try {
-        const stored = localStorage.getItem("hg_recast_studio_assets");
+        migrateLegacyPersistKey("hg_recast_studio_assets", ASSETS_KEY);
+        const stored = localStorage.getItem(ASSETS_KEY);
         if (stored) {
           const data = JSON.parse(stored);
           return data.results || [];
@@ -611,7 +615,7 @@ export default function RecastStudio({
   useEffect(() => {
     try {
       localStorage.setItem(
-        "hg_recast_studio_assets",
+        ASSETS_KEY,
         JSON.stringify({
           videos: assetVideos,
           images: assetImages,

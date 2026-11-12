@@ -34,16 +34,16 @@ const UPSCALE_MODELS = [
   },
 ];
 
-// Sample initial image & decomposed layers for demonstration (Seedream Wild Beauty via CDN)
+// Bundled sample: the original provider CDN image now returns AccessDenied.
 const DEFAULT_SAMPLE_IMAGE =
-  "https://cdn.muapi.ai/assets/1786019968051_cKRYLHHu.png";
+  "/assets/layers/sample.webp";
 
 const DEFAULT_SAMPLE_LAYERS = [
-  "https://cdn.muapi.ai/assets/1786021161819_iOe80bNR.webp",
-  "https://cdn.muapi.ai/assets/1786020452731_mB4m6NFR.webp",
-  "https://cdn.muapi.ai/assets/1786021169234_iyVccSAA.webp",
-  "https://cdn.muapi.ai/assets/1786021154170_Dx9snemT.webp",
-  "https://cdn.muapi.ai/assets/1786021150882_p9lgz4lY.webp",
+  "/assets/layers/sample-layer-2.webp",
+  "/assets/layers/sample-layer-1.webp",
+  "/assets/layers/sample-layer-3.webp",
+  "/assets/layers/sample-layer-4.webp",
+  "/assets/layers/sample-layer-5.webp",
 ];
 
 // Preset colors for Marker & Shapes tool
@@ -178,6 +178,22 @@ export default function LayersStudio({
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [visibleLayers, setVisibleLayers] = useState({});
   const [isSoloMode, setIsSoloMode] = useState(false);
+
+  // A protected local sample must be uploaded before the external provider can read it.
+  const sampleUploadRef = useRef(null);
+  const getProviderImageUrl = async () => {
+    if (currentImageUrl !== DEFAULT_SAMPLE_IMAGE) return currentImageUrl;
+    if (!sampleUploadRef.current) {
+      sampleUploadRef.current = fetch(DEFAULT_SAMPLE_IMAGE)
+        .then(response => {
+          if (!response.ok) throw new Error("Sample image unavailable");
+          return response.blob();
+        })
+        .then(blob => uploadFile(apiKey, new File([blob], "layers-sample.webp", { type: "image/webp" })))
+        .catch(error => { sampleUploadRef.current = null; throw error; });
+    }
+    return sampleUploadRef.current;
+  };
 
   // Canvas Refs
   const fileInputRef = useRef(null);
@@ -750,7 +766,7 @@ export default function LayersStudio({
         : regionalPrompt;
 
       const result = await decomposeLayers(apiKey, {
-        image_url: currentImageUrl,
+        image_url: await getProviderImageUrl(),
         prompt: formattedPrompt,
         resolution: resolution,
         output_format: outputFormat,
@@ -842,7 +858,7 @@ export default function LayersStudio({
       }, 800);
 
       const result = await decomposeLayers(apiKey, {
-        image_url: currentImageUrl,
+        image_url: await getProviderImageUrl(),
         prompt: finalSeedreamPrompt,
         resolution: resolution,
         output_format: outputFormat,
@@ -901,7 +917,7 @@ export default function LayersStudio({
 
       const result = await upscaleImage(apiKey, {
         model: upscaleModel,
-        image_url: currentImageUrl,
+        image_url: await getProviderImageUrl(),
         resolution: seedvrResolution,
         upscale_factor: topazFactor,
       });
@@ -959,7 +975,7 @@ export default function LayersStudio({
       }, 700);
 
       const result = await removeBackground(apiKey, {
-        image_url: currentImageUrl,
+        image_url: await getProviderImageUrl(),
       });
 
       clearInterval(progressInterval);
@@ -1015,7 +1031,7 @@ export default function LayersStudio({
       }, 700);
 
       const result = await expandImage(apiKey, {
-        image_url: currentImageUrl,
+        image_url: await getProviderImageUrl(),
       });
 
       clearInterval(progressInterval);
@@ -1150,11 +1166,9 @@ export default function LayersStudio({
     }
   };
 
-  // Load Seedream Wild Beauty 5-Layer Decomposition Example via CDN
+  // Load the bundled five-layer decomposition example.
   const handleLoadSampleLayers = () => {
-    setCurrentImageUrl(
-      "https://cdn.muapi.ai/assets/1786019968051_cKRYLHHu.png",
-    );
+    setCurrentImageUrl(DEFAULT_SAMPLE_IMAGE);
     setDecomposedLayers(DEFAULT_SAMPLE_LAYERS);
     setCarouselIndex(0);
     const initialVis = {};
@@ -1196,7 +1210,7 @@ export default function LayersStudio({
           model: "nano-banana-pro-edit",
           prompt:
             "Enhance image contrast, color balance, exposure, and sharpness.",
-          image_url: currentImageUrl,
+          image_url: await getProviderImageUrl(),
         });
       } else if (toolId === "edit-text") {
         const textPrompt =
@@ -1206,13 +1220,13 @@ export default function LayersStudio({
         result = await generateI2I(apiKey, {
           model: "nano-banana-pro-edit",
           prompt: textPrompt,
-          image_url: currentImageUrl,
+          image_url: await getProviderImageUrl(),
         });
       } else {
         result = await generateI2I(apiKey, {
           model: "nano-banana-pro-edit",
           prompt: prompt || `Apply ${toolId} image transformation.`,
-          image_url: currentImageUrl,
+          image_url: await getProviderImageUrl(),
         });
       }
 
@@ -2227,7 +2241,7 @@ export default function LayersStudio({
                   <div className="flex items-center gap-2.5">
                     <div className="relative w-28 h-36 rounded-2xl overflow-hidden bg-zinc-900 flex-shrink-0 shadow-md">
                       <img
-                        src="https://cdn.muapi.ai/assets/1786019968051_cKRYLHHu.png"
+                        src={DEFAULT_SAMPLE_IMAGE}
                         alt="Seedream original demo"
                         className="w-full h-full object-cover"
                       />

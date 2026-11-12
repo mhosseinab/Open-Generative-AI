@@ -45,7 +45,7 @@ export async function pollForGenerationResult({
     let response;
     try {
       response = await fetchImpl(pollUrl, {
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+        headers: { "Content-Type": "application/json", ...(typeof apiKey === "string" && apiKey ? { "x-api-key": apiKey } : {}) },
       });
     } catch (error) {
       if (attempt === maxAttempts) throw error;

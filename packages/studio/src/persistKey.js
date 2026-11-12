@@ -5,11 +5,12 @@
 // unrelated accounts on a shared device.
 export function scopedPersistKey(baseKey, apiKey) {
   if (!apiKey) return baseKey;
+  const identity = apiKey.staffMode ? `staff:${apiKey.email}` : apiKey;
   // Short, stable hash — avoids putting a raw session token/API key verbatim
   // into a localStorage key name.
   let hash = 0;
-  for (let i = 0; i < apiKey.length; i++) {
-    hash = (hash * 31 + apiKey.charCodeAt(i)) | 0;
+  for (let i = 0; i < identity.length; i++) {
+    hash = (hash * 31 + identity.charCodeAt(i)) | 0;
   }
   return `${baseKey}:${(hash >>> 0).toString(36)}`;
 }
@@ -17,14 +18,14 @@ export function scopedPersistKey(baseKey, apiKey) {
 // One-time best-effort carryover from the old shared (unscoped) key into the
 // current identity's scoped key, then clears the old key so the next different
 // identity on this browser doesn't inherit (or re-leak) it.
-export function migrateLegacyPersistKey(baseKey, scopedKey) {
+export function migrateLegacyPersistKey(baseKey, scopedKey, storage = globalThis.localStorage) {
   if (scopedKey === baseKey) return;
   try {
-    if (localStorage.getItem(scopedKey)) return; // already migrated
-    const legacy = localStorage.getItem(baseKey);
+    if (storage.getItem(scopedKey)) return; // already migrated
+    const legacy = storage.getItem(baseKey);
     if (legacy) {
-      localStorage.setItem(scopedKey, legacy);
-      localStorage.removeItem(baseKey);
+      storage.setItem(scopedKey, legacy);
+      storage.removeItem(baseKey);
     }
   } catch {
     // localStorage unavailable (SSR/private mode) — nothing to migrate

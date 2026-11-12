@@ -17,6 +17,10 @@ const BASE_URL = (typeof window !== 'undefined' && window.location?.protocol?.st
     ? '/api'
     : 'https://api.muapi.ai';
 const PROXY_WF_BASE = '/api/workflow';
+function apiKeyHeaders(key) {
+    return typeof key === 'string' && key ? { 'x-api-key': key } : {};
+}
+
 const FILE_UPLOAD_TIMEOUT_MS = 300_000;
 const FILE_UPLOAD_PENDING_PROGRESS = 99;
 
@@ -65,7 +69,7 @@ async function submitAndPoll(endpoint, payload, key, onRequestId, maxAttempts = 
     const url = `${BASE_URL}/api/v1/${endpoint}`;
     const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': key },
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeaders(key) },
         body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -374,7 +378,7 @@ export function uploadFile(apiKey, file, onProgress) {
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url);
-        xhr.setRequestHeader('x-api-key', apiKey);
+        if (typeof apiKey === 'string' && apiKey) xhr.setRequestHeader('x-api-key', apiKey);
         xhr.timeout = FILE_UPLOAD_TIMEOUT_MS;
 
         if (onProgress) {
@@ -408,6 +412,10 @@ export function uploadFile(apiKey, file, onProgress) {
                 try {
                     const errObj = JSON.parse(xhr.responseText);
                     detail = errObj.detail || detail;
+                    if (errObj.error === 'INSUFFICIENT_CREDITS' && typeof detail === 'string') {
+                        reject(new Error(detail));
+                        return;
+                    }
                 } catch (e) {
                     // fallback to statusText
                 }
@@ -426,7 +434,7 @@ export async function getUserBalance(apiKey) {
     const response = await fetch(`${BASE_URL}/api/v1/account/balance`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -441,7 +449,7 @@ export async function getTemplateWorkflows(apiKey) {
     const response = await fetch(`${BASE_URL}/workflow/get-template-workflows`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -455,7 +463,7 @@ export async function getUserWorkflows(apiKey) {
     const response = await fetch(`${BASE_URL}/workflow/get-workflow-defs`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -469,7 +477,7 @@ export async function getPublishedWorkflows(apiKey) {
     const response = await fetch(`${BASE_URL}/workflow/get-published-workflows`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -484,7 +492,7 @@ export async function getTemplateAgents(apiKey) {
     const response = await fetch(`${BASE_URL}/agents/templates/agents`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -499,7 +507,7 @@ export async function getUserAgents(apiKey) {
     const response = await fetch(`${BASE_URL}/agents/user/agents`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -515,7 +523,7 @@ export async function getPublishedAgents(apiKey) {
     const response = await fetch(`${BASE_URL}/agents/featured/agents`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -531,7 +539,7 @@ export async function getUserConversations(apiKey) {
     const response = await fetch(`${BASE_URL}/agents/user/conversations`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -548,7 +556,7 @@ export async function getAgentBySlug(apiKey, slug) {
     const response = await fetch(`${BASE_URL}/agents/by-slug/${slug}`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -563,7 +571,7 @@ export async function getAgentConversation(apiKey, agentSlug, conversationId) {
     const response = await fetch(`${BASE_URL}/agents/by-slug/${agentSlug}/${conversationId}`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -580,7 +588,7 @@ export async function sendAgentChatMessage(apiKey, agentSlug, { message, convers
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify({
             message,
@@ -609,7 +617,7 @@ export async function pollAgentChatResult(apiKey, requestId, { maxAttempts = 150
         const response = await fetch(url, {
             headers: {
                 'Content-Type': 'application/json',
-                'x-api-key': apiKey
+                ...apiKeyHeaders(apiKey)
             }
         });
         if (response.status === 400) {
@@ -634,7 +642,7 @@ export async function createAgent(apiKey, payload) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify(payload)
     });
@@ -650,7 +658,7 @@ export async function createWorkflow(apiKey, payload) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify(payload)
     });
@@ -666,7 +674,7 @@ export async function updateWorkflowName(apiKey, workflowId, name) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify({ name })
     });
@@ -682,7 +690,7 @@ export async function deleteWorkflow(apiKey, workflowId) {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -696,7 +704,7 @@ export async function getWorkflowInputs(apiKey, workflowId) {
     const response = await fetch(`${BASE_URL}/workflow/${workflowId}/api-inputs`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -711,7 +719,7 @@ export async function executeWorkflow(apiKey, workflowId, inputs) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify({ inputs })
     });
@@ -733,7 +741,7 @@ async function pollWorkflowResult(runId, apiKey, maxAttempts = 900, interval = 2
         await new Promise(resolve => setTimeout(resolve, interval));
         try {
             const response = await fetch(pollUrl, {
-                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey }
+                headers: { 'Content-Type': 'application/json', ...apiKeyHeaders(apiKey) }
             });
             if (!response.ok) {
                 if (response.status >= 500) continue;
@@ -754,7 +762,7 @@ export async function getAllNodeSchemas(apiKey, workflowId) {
     const response = await fetch(`${BASE_URL}/workflow/${workflowId}/node-schemas`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -768,7 +776,7 @@ export async function getWorkflowData(apiKey, workflowId) {
     const response = await fetch(`${BASE_URL}/workflow/get-workflow-def/${workflowId}`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -782,7 +790,7 @@ export async function getNodeSchemas(apiKey, workflowId) {
     const response = await fetch(`${BASE_URL}/workflow/${workflowId}/api-node-schemas`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -797,7 +805,7 @@ export async function runSingleNode(apiKey, workflowId, nodeId, payload) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify(payload)
     });
@@ -813,7 +821,7 @@ export async function deleteNodeRun(apiKey, nodeRunId) {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -827,7 +835,7 @@ export async function getNodeStatus(apiKey, runId) {
     const response = await fetch(`${BASE_URL}/workflow/run/${runId}/status`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -849,7 +857,7 @@ export async function handleProxyRequest(prefix, path, method, headers, body, ap
     finalHeaders.delete('connection');
     finalHeaders.delete('content-length'); // Let fetch recalculate this for safety
 
-    if (apiKey) {
+    if (typeof apiKey === 'string' && apiKey) {
         finalHeaders.set('x-api-key', apiKey);
     }
 
@@ -912,7 +920,7 @@ export async function calculateDynamicCost(apiKey, taskName, payload) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify({ task_name: taskName, payload })
     });
@@ -928,7 +936,7 @@ export async function registerAppInterest(apiKey, appName) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         },
         body: JSON.stringify({ app_name: appName })
     });
@@ -943,7 +951,7 @@ export async function getAppInterests(apiKey) {
     const response = await fetch(`${BASE_URL}/app/interests`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -962,7 +970,7 @@ export async function getHistory(apiKey, { cursor, limit = 50 } = {}) {
     const response = await fetch(`${BASE_URL}/api/v1/history?${params.toString()}`, {
         headers: {
             'Content-Type': 'application/json',
-            'x-api-key': apiKey
+            ...apiKeyHeaders(apiKey)
         }
     });
     if (!response.ok) {
@@ -980,7 +988,7 @@ export async function getHistory(apiKey, { cursor, limit = 50 } = {}) {
 export async function deleteMedia(apiKey, requestId) {
     const response = await fetch(`${BASE_URL}/api/v1/predictions/${requestId}/media`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey }
+        headers: { 'Content-Type': 'application/json', ...apiKeyHeaders(apiKey) }
     });
     if (!response.ok) {
         const errText = await response.text();

@@ -1,9 +1,13 @@
+import { persistStaffUpload } from '../../../../src/lib/staffMedia.mjs';
+import { isStaffMode, getStaffIdentity } from '../../../../src/lib/staffAuth.mjs';
 import { NextResponse } from 'next/server';
 import { validateUploadProxyTarget, getApiKeyFromRequest, isBlockedFileType } from '../../../../src/lib/uploadProxyTarget';
 
 export async function POST(request) {
+    if (isStaffMode()) return persistStaffUpload(request);
     try {
-        const apiKey = getApiKeyFromRequest(request);
+        const identity = isStaffMode() ? await getStaffIdentity(request) : null;
+        const apiKey = identity || getApiKeyFromRequest(request);
         if (!apiKey) {
             return NextResponse.json({ error: 'Unauthorized: Missing API key' }, { status: 401 });
         }
@@ -67,8 +71,7 @@ export async function POST(request) {
             return new Response(errorText, { status: s3Response.status });
         }
     } catch (error) {
-        console.error('Upload Proxy Exception:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: error.status ? error.message : 'Upload temporarily unavailable' }, { status: error.status || 503 });
     }
 }
 

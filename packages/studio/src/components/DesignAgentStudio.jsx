@@ -24,7 +24,7 @@ export default function DesignAgentStudio({
   // CreativeCanvas's first sessions/agent-skills fetch had already gone out unauthenticated.
   if (typeof window !== 'undefined' && apiKey) {
     sessionStorage.setItem("fromDesignAgent", "true");
-    localStorage.setItem("token", apiKey);
+    if (typeof apiKey === "string") localStorage.setItem("token", apiKey);
   }
 
   useEffect(() => {

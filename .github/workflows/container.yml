@@ -1,0 +1,78 @@
+name: Test and publish container
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.23.5"
+          cache: npm
+      - run: npm ci
+      - name: Check staff authentication, browser client, and storage
+        run: |
+          node tests/staffAuth.test.mjs
+          node tests/staff-client.test.mjs
+          node tests/videoStorage.test.cjs
+          node tests/durableMedia.test.mjs
+          node tests/mediaResponse.test.mjs
+          node tests/hostedPatches.test.cjs
+
+  publish:
+    needs: test
+    if: github.repository == 'mhosseinab/Open-Generative-AI' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build ARM64 image
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          push: false
+          tags: ghcr.io/mhosseinab/open-generative-ai:sha-${{ github.sha }}
+          build-args: VCS_REF=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+      - name: Smoke-test production container
+        env:
+          IMAGE: ghcr.io/mhosseinab/open-generative-ai:sha-${{ github.sha }}
+        run: node scripts/smoke-container.mjs "$IMAGE"
+      - name: Publish tested image
+        env:
+          IMAGE: ghcr.io/mhosseinab/open-generative-ai:sha-${{ github.sha }}
+        run: |
+          docker push "$IMAGE"
+          printf 'Image: `%s`\n' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
