@@ -311,3 +311,14 @@ test('CDN downloads identify the client and retain validated DNS pinning', async
     const chunks = []; for await (const chunk of media.body) chunks.push(chunk);
     assert.equal(Buffer.concat(chunks).toString(), 'video');
 });
+
+test('saved provider input references use permanent links alongside generated outputs', async () => {
+    const f = fixture();
+    const saved = await storage.archivePredictionResult({ status: 'completed', inputs: {
+        images_list: ['https://cdn.example/reference.png?expires=old'],
+        prompt: 'Reference documentation: https://docs.example/guide',
+    }, outputs: ['https://cdn.example/result.png'] }, f.options);
+    stable(saved.inputs.images_list[0]); stable(saved.outputs[0]);
+    assert.equal(saved.inputs.prompt, 'Reference documentation: https://docs.example/guide');
+    assert.equal((await storage.getArchivedResult(f.options.requestId, f.options)).inputs.images_list[0], saved.inputs.images_list[0]);
+});

@@ -11,8 +11,8 @@ const pendingUploads = new Map();
 const MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
 const mediaTypes = new Set(['image', 'video', 'audio', 'file', 'media', 'image_url', 'video_url', 'audio_url', 'file_url', 'media_url']);
-const mediaFields = new Set(['url', 'uri', 'src', 'image_url', 'video_url', 'audio_url', 'file_url', 'media_url', 'preview_url', 'thumbnail_url', 'download_url', 'signed_url', 'poster_url', 'image', 'video', 'audio', 'images', 'videos', 'audios', 'outputs', 'media', 'files']);
-const containerFields = new Set(['output', 'outputs', 'result', 'results', 'data', 'assets', 'attachments', 'nodes', 'messages', 'events', 'payload', 'content', 'history', 'conversation', 'conversation_history', 'message_history', 'chat_history', 'tool_result', 'asset', 'canvas_state', 'workflow_definition', 'files', 'images', 'videos', 'audios', 'media']);
+const mediaFields = new Set(['url', 'uri', 'src', 'image_url', 'video_url', 'audio_url', 'file_url', 'media_url', 'preview_url', 'thumbnail_url', 'download_url', 'signed_url', 'poster_url', 'image', 'video', 'audio', 'images', 'videos', 'audios', 'images_list', 'videos_list', 'audios_list', 'image_urls', 'video_urls', 'audio_urls', 'outputs', 'media', 'files']);
+const containerFields = new Set(['input', 'inputs', 'output', 'outputs', 'result', 'results', 'data', 'assets', 'attachments', 'nodes', 'messages', 'events', 'payload', 'content', 'history', 'conversation', 'conversation_history', 'message_history', 'chat_history', 'tool_result', 'asset', 'canvas_state', 'workflow_definition', 'files', 'images', 'videos', 'audios', 'media']);
 const structuredFields = new Set(['canvas_state', 'workflow_definition']);
 const extensionTypes = {
     mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', m4v: 'video/mp4',
