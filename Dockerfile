@@ -20,15 +20,15 @@ RUN NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
 # Assemble a runtime from the same pinned Node/musl build. Package managers,
 # headers, compilers, and the build-stage filesystem do not enter the final image.
-FROM base AS runtime-files
-RUN mkdir -p /runtime/usr/local/bin /runtime/usr/lib /runtime/etc /runtime/tmp /runtime/run/secrets \
-    && chmod 1777 /runtime/tmp \
-    && cp /usr/local/bin/node /runtime/usr/local/bin/node \
-    && cp /usr/local/LICENSE /runtime/usr/local/LICENSE \
-    && cp -a /lib /runtime/lib \
-    && cp -a /usr/lib/. /runtime/usr/lib/ \
-    && cp -a /etc/ssl /runtime/etc/ssl \
-    && cp /etc/passwd /etc/group /runtime/etc/
+FROM scratch AS runtime-files
+COPY --from=base /usr/local/bin/node /usr/local/bin/node
+COPY --from=base /lib/ /lib/
+COPY --from=base /usr/lib/ /usr/lib/
+COPY --from=base /etc/ssl/ /etc/ssl/
+COPY --from=base /etc/passwd /etc/group /etc/
+COPY --from=base --chown=1000:1000 /tmp/ /tmp/
+# The ARM64 source-built Node base omits the packaged license file.
+COPY licenses/node-LICENSE /usr/local/LICENSE
 
 FROM scratch AS runner
 WORKDIR /app
@@ -39,7 +39,7 @@ LABEL org.opencontainers.image.source="https://github.com/mhosseinab/Open-Genera
       org.opencontainers.image.revision=$VCS_REF \
       org.opencontainers.image.title="GenerativeAIStudio" \
       org.opencontainers.image.licenses="MIT"
-COPY --from=runtime-files /runtime/ /
+COPY --from=runtime-files / /
 COPY --from=build --chown=1000:1000 /app/.next/standalone ./
 COPY --from=build --chown=1000:1000 /app/.next/static ./.next/static
 COPY --from=build --chown=1000:1000 /app/public ./public
